@@ -11,6 +11,9 @@ using GLM
 using StatsBase
 using JLD
 using OnlineStats
+using Turing
+using StatsPlots
+using Distributions
 
 
 
@@ -159,3 +162,53 @@ dat.tipNames = dat.species;
 
 @btime plm = phylolm(@formula(tmin ~ 1), dat, tree2)
 
+
+#############################################################
+
+#Bayes
+
+#Create C 
+leaves = dat.species
+C = zeros(length(leaves), length(leaves));
+#make the matrix (this code could probably be optimised)
+for i in 1:length(leaves)
+    C[i,i] = getheight(tree1, leaves[i])
+    for j in i+1:length(leaves)
+        ancestor = mrca(tree1, [leaves[i],leaves[j]])
+        C[i,j] = getheight(tree1, ancestor)
+        C[j,i] = C[i,j]
+    end
+end
+
+#Create the model to go into sampler
+@model function estmrates(C, trait)
+    #C = length matrix, traits - trait we want to model
+    z ~ Uniform(0,500)
+    sigma ~ Uniform(0,100)
+    trait ~ MvNormal(z*ones(length(trait)), sigma*C)
+end
+
+chain = sample(estmrates(C, dat.tmin), HMC(0.1, 5), 1000)
+
+##########################################################
+
+#PhyloNetworks lambda
+
+plml = phylolm(@formula(tmin ~ 1), dat, tree2, model="lambda")
+
+###########################################################
+
+#Create the model to go into sampler
+@model function estmrateslambda(C, trait)
+    #C = length matrix, traits - trait we want to model
+    z ~ Uniform(0,500)
+    sigma ~ Uniform(0,100)
+    lambda ~ Uniform(0,1)
+
+    dC = diagm(diag(C))
+    D = (lambda * (C - dC) + dC)
+
+    trait ~ MvNormal(z*ones(length(trait)), sigma*(D))
+end
+
+chain = sample(estmrateslambda(C, dat.tmin), HMC(0.1, 5), 1000)
