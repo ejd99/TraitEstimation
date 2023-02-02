@@ -168,27 +168,124 @@ dat.tipNames = dat.species;
 #Bayes
 
 #Create C 
-leaves = dat.species
-C = zeros(length(leaves), length(leaves));
+leavess = dat.species
+C = zeros(length(leavess), length(leavess));
 #make the matrix (this code could probably be optimised)
-for i in 1:length(leaves)
-    C[i,i] = getheight(tree1, leaves[i])
-    for j in i+1:length(leaves)
-        ancestor = mrca(tree1, [leaves[i],leaves[j]])
+for i in 1:length(leavess)
+    C[i,i] = getheight(tree1, leavess[i])
+    for j in i+1:length(leavess)
+        ancestor = mrca(tree1, [leavess[i],leavess[j]])
         C[i,j] = getheight(tree1, ancestor)
         C[j,i] = C[i,j]
     end
 end
 
+#look at how traits are distrbuted
+#=
+histogram(dat.tmin, bins=25, normalize=:pdf)
+histogram(dat.tmax, bins=25, normalize=:pdf)
+histogram(dat.trng, bins=25, normalize=:pdf)
+histogram(dat.stl1, bins=25, normalize=:pdf)
+histogram(dat.stl2, bins=25, normalize=:pdf)
+histogram(dat.stl3, bins=25, normalize=:pdf)
+histogram(dat.stl4, bins=25, normalize=:pdf)
+histogram(dat.swvl1, bins=25, normalize=:pdf)
+histogram(dat.swvl2, bins=25, normalize=:pdf)
+histogram(dat.swvl3, bins=25, normalize=:pdf)
+histogram(dat.swvl4, bins=25, normalize=:pdf)
+histogram(dat.ssr, bins=25, normalize=:pdf)
+histogram(dat.tp, bins=25, normalize=:pdf)
+=#
+
 #Create the model to go into sampler
-@model function estmrates(C, trait)
+#model for tmin
+@model function estmratestmin(C, trait)
     #C = length matrix, traits - trait we want to model
     z ~ Uniform(0,500)
     sigma ~ Uniform(0,100)
     trait ~ MvNormal(z*ones(length(trait)), sigma*C)
 end
 
-chain = sample(estmrates(C, dat.tmin), HMC(0.1, 5), 1000)
+chain = sample(estmratestmin(C, dat.tmin), HMC(0.01, 10), 1000, discard_initial = 100)
+
+chains = mapreduce(c -> sample(estmratestmin(C, dat.tmin), HMC(0.01, 10), 1000, discard_initial = 100), chainscat, 1:3)
+
+#model for tmax
+@model function estmratestmax(C, trait)
+    #C = length matrix, traits - trait we want to model
+    z ~ Uniform(0,500)
+    sigma ~ Uniform(0,100)
+    trait ~ MvNormal(z*ones(length(trait)), sigma*C)
+end
+
+chain = sample(estmratestmax(C, dat.tmax), HMC(0.01, 10), 1000, discard_initial = 100)
+
+#model for trng
+@model function estmratestrng(C, trait)
+    #C = length matrix, traits - trait we want to model
+    z ~ Uniform(0,20)
+    sigma ~ Uniform(0,100)
+    trait ~ MvNormal(z*ones(length(trait)), sigma*C)
+end
+
+chain = sample(estmratestrng(C, dat.trng), HMC(0.01, 10), 1000, discard_initial = 100) #poor ess for z (3) 
+
+#model for stl
+@model function estmratesstl(C, trait)
+    #C = length matrix, traits - trait we want to model
+    z ~ Uniform(0,500)
+    sigma ~ Uniform(0,100)
+    trait ~ MvNormal(z*ones(length(trait)), sigma*C)
+end
+
+chain = sample(estmratesstl(C, dat.stl1), HMC(0.01, 10), 1000, discard_initial = 100)
+chain = sample(estmratesstl(C, dat.stl2), HMC(0.01, 10), 1000, discard_initial = 100)
+chain = sample(estmratesstl(C, dat.stl3), HMC(0.01, 10), 1000, discard_initial = 100)
+chain = sample(estmratesstl(C, dat.stl4), HMC(0.01, 10), 1000, discard_initial = 100)
+
+#model for swvl
+@model function estmratesswvl(C, trait)
+    #C = length matrix, traits - trait we want to model
+    z ~ Uniform(0,10)
+    sigma ~ Uniform(0,100)
+    trait ~ MvNormal(z*ones(length(trait)), sigma*C)
+end
+
+chain = sample(estmratesswvl(C, dat.swvl1), HMC(0.01, 10), 1000, discard_initial = 100) #ess for z is 30
+chain = sample(estmratesswvl(C, dat.swvl2), HMC(0.01, 10), 1000, discard_initial = 100)
+chain = sample(estmratesswvl(C, dat.swvl3), HMC(0.01, 10), 1000, discard_initial = 100)
+chain = sample(estmratesswvl(C, dat.swvl4), HMC(0.01, 10), 1000, discard_initial = 100)
+
+#model for ssr
+@model function estmratesssr(C, trait)
+    #C = length matrix, traits - trait we want to model
+    z ~ Uniform(0,4e7)
+    sigma ~ Uniform(0,100)
+    trait ~ MvNormal(z*ones(length(trait)), sigma*C)
+end
+
+chain = sample(estmratesssr(C, dat.ssr), HMC(0.01, 10), 1000, discard_initial = 100) #bad ess for both 3
+
+#model for tp
+@model function estmratestp(C, trait)
+    #C = length matrix, traits - trait we want to model
+    z ~ Uniform(0,1)
+    sigma ~ Uniform(0,100)
+    trait ~ MvNormal(z*ones(length(trait)), sigma*C)
+end
+
+chain = sample(estmratestp(C, dat.tp), HMC(0.01, 10), 1000, discard_initial = 100) #ess for z is ~50
+
+#maybe try importance sampling
+
+#MultiChain
+#sample(model, sampler, parallel_type, n, n_chains)
+#where parallel_type can be either MCMCThreads() or MCMCDistributed() for thread and parallel sampling, respectively.
+#Need to set up Julia appropriately for this method
+#To not run in parallel use:
+# Replace num_chains below with however many chains you wish to sample.
+#chains = mapreduce(c -> sample(model_fun, sampler, 1000), chainscat, 1:num_chains) 
+
 
 ##########################################################
 
