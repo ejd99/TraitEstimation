@@ -33,7 +33,6 @@ function threepoint(tree, df, traits, N)
             df.xl[i] = 1
             df.Q[i] = data/df.t[i]
             df.xx[i] = 1/df.t[i]
-            df.yl[i] = data
             df.yy[i] =  (data*data)/df.t[i]
         else
             #need to find direct desendents 
@@ -47,13 +46,37 @@ function threepoint(tree, df, traits, N)
             df.p[i] = pA/(1+df.t[i]*pA)
             df.xl[i] = sum(ws.*cdf.xl)
             df.yl[i] = sum(ws.*cdf.yl)
-            df.Q[i] = sum(cdf.Q) - ((df.t[i]*pA^2)/(1+df.t[i]*pA))*df.yl[i]*df.xl[i]
+            df.Q[i] = sum(cdf.Q) - ((df.t[i]*pA^2)/(1+df.t[i]*pA))*df.xl[i]*df.yl[i]
             df.xx[i] = sum(cdf.xx) - ((df.t[i]*pA^2)/(1+df.t[i]*pA))*df.xl[i]*df.xl[i]
             df.yy[i] = sum(cdf.yy) - ((df.t[i]*pA^2)/(1+df.t[i]*pA))*df.yl[i]*df.yl[i]
         end
     end
     return df
 end
+
+function testtime(tree, traits)
+#Function to see how long it takes to et inputs into right form for threepoint (takes 544ms, is the reason why function takes time)
+
+    leafnames = getnodenames(tree, postorder)
+    #total number of nodes
+    N = length(leafnames)
+    #number of leaves
+    n = nrow(traits)
+    #vector of heigts for each node
+    t = getheight.(tree, leafnames)
+
+    #dataframe to save information in
+    df = DataFrame(Node = leafnames, 
+               t = t,
+               logV = Vector{Union{Nothing, Float64}}(nothing, N),
+               p = Vector{Union{Nothing, Float64}}(nothing, N),
+               Q = Vector{Union{Nothing, Float64}}(nothing, N),
+               xl = Vector{Union{Nothing, Float64}}(nothing, N),
+               xx = Vector{Union{Nothing, Float64}}(nothing, N),
+               yl = Vector{Union{Nothing, Float64}}(nothing, N),
+               yy = Vector{Union{Nothing, Float64}}(nothing, N))
+end
+
 
 function estimaterates(tree, traits)
     #Returns evolution rate, starting value and negative log loglikelihood for traits on tip of tree
@@ -69,16 +92,16 @@ function estimaterates(tree, traits)
     #INPUT TESTS
     #traits for each leaf?
 
-    names = getnodenames(tree, postorder)
+    leafnames = getnodenames(tree, postorder)
     #total number of nodes
-    N = length(names)
+    N = length(leafnames)
     #number of leaves
     n = nrow(traits)
     #vector of heigts for each node
-    t = getheight.(tree, names)
+    t = getheight.(tree, leafnames)
 
     #dataframe to save information in
-    df = DataFrame(Node = names, 
+    df = DataFrame(Node = leafnames, 
                t = t,
                logV = Vector{Union{Nothing, Float64}}(nothing, N),
                p = Vector{Union{Nothing, Float64}}(nothing, N),
@@ -91,7 +114,7 @@ function estimaterates(tree, traits)
     df = threepoint(tree, df, traits, N)    
 
     betahat = inv(df.xx[N]) * df.Q[N]
-    sigmahat = -(df.yy[N] - 2 * betahat * df.Q[N] + betahat * df.xx[N])/n
+    sigmahat = (df.yy[N] - 2 * betahat * df.Q[N] + betahat * df.xx[N] * betahat)/n
 
     
     if sigmahat < 0
@@ -101,7 +124,7 @@ function estimaterates(tree, traits)
         sigmahat = df2.yy[N]/n
     end
 
-    negloglik = (1/2)*(n*log(2*pi) + df.logV[N] + n*log(sigmahat))
+    negloglik = (1/2)*(n*log(2*pi) + df.logV[N] + n + n*log(sigmahat))
 
     return betahat, sigmahat, negloglik, df
 end  
