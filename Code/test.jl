@@ -17,6 +17,8 @@ using Distributions
 
 
 
+
+
 function threepoint(tree, df, traits, N)
     #prefrom algortihm in Ho & Ane 2014
     #function estimaterates gets inputs into right form
@@ -114,16 +116,16 @@ function estimaterates(tree, traits)
     df = threepoint(tree, df, traits, N)    
 
     betahat = inv(df.xx[N]) * df.Q[N]
-    sigmahat = (df.yy[N] - 2 * betahat * df.Q[N] + betahat * df.xx[N] * betahat)/n
+    sigmahat = -(df.yy[N] - 2 * betahat * df.Q[N] + betahat * df.xx[N] * betahat)/n
 
     
-    if sigmahat < 0
+    if sigmahat < 0 #if used prints df2 at the end?
         resdl = ones(n)*betahat - traits.data #replaces y which is traits
         traits2 = DataFrame(species = traits.species, data = resdl)
         df2 = threepoint(tree, df, traits2, N)
         sigmahat = df2.yy[N]/n
     end
-
+    
     negloglik = (1/2)*(n*log(2*pi) + df.logV[N] + n + n*log(sigmahat))
 
     return betahat, sigmahat, negloglik, df
@@ -232,6 +234,7 @@ end
 chain = sample(estmratestmin(C, dat.tmin), HMC(0.01, 10), 1000, discard_initial = 100)
 
 chains = mapreduce(c -> sample(estmratestmin(C, dat.tmin), HMC(0.01, 10), 1000, discard_initial = 100), chainscat, 1:3)
+
 
 #model for tmax
 @model function estmratestmax(C, trait)
