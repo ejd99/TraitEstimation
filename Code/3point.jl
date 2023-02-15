@@ -41,7 +41,7 @@ function threepoint(tree, df, traits, N)
             pA = sum(cdf.p)
             ws = cdf.p/pA
     
-            df.logV[i] = sum(cdf.logV) + log(1+ pA) 
+            df.logV[i] = sum(cdf.logV) + log(1+ df.t[i]*pA) 
             df.p[i] = pA/(1+df.t[i]*pA)
             df.xl[i] = sum(ws.*cdf.xl)
             df.yl[i] = sum(ws.*cdf.yl)
@@ -96,19 +96,24 @@ function estimaterates(tree, traits)
     N = length(leafnames)
     #number of leaves
     n = nrow(traits)
-    #vector of heigts for each node
-    t = getheight.(tree, leafnames)
 
     #dataframe to save information in
     df = DataFrame(Node = leafnames, 
-               t = t,
-               logV = Vector{Union{Nothing, Float64}}(nothing, N),
-               p = Vector{Union{Nothing, Float64}}(nothing, N),
-               Q = Vector{Union{Nothing, Float64}}(nothing, N),
-               xl = Vector{Union{Nothing, Float64}}(nothing, N),
-               xx = Vector{Union{Nothing, Float64}}(nothing, N),
-               yl = Vector{Union{Nothing, Float64}}(nothing, N),
-               yy = Vector{Union{Nothing, Float64}}(nothing, N))
+            t = Vector{Union{Nothing, Float64}}(nothing, N),
+            logV = Vector{Union{Nothing, Float64}}(nothing, N),
+            p = Vector{Union{Nothing, Float64}}(nothing, N),
+            Q = Vector{Union{Nothing, Float64}}(nothing, N),
+            xl = Vector{Union{Nothing, Float64}}(nothing, N),
+            xx = Vector{Union{Nothing, Float64}}(nothing, N),
+            yl = Vector{Union{Nothing, Float64}}(nothing, N),
+            yy = Vector{Union{Nothing, Float64}}(nothing, N))
+
+    for i in 1:(N-1)
+        par = getparent(tree, df.Node[i])
+        df.t[i] = distance(tree, df.Node[i], par)
+    end
+
+    df.t[N] = 0
 
     df = threepoint(tree, df, traits, N)    
 
@@ -160,7 +165,7 @@ traits = dat[:,1:2]
 #columns need renamed to work in my function
 rename!(traits, :tmin => :data)
 
-estimaterates(tree1, traits)
+@btime estimaterates(tree1, traits)
 
 
 #Create C 
