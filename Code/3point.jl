@@ -11,9 +11,6 @@ using GLM
 using StatsBase
 using JLD
 using OnlineStats
-using Turing
-using StatsPlots
-using Distributions
 
 
 function threepoint(tree, df, traits, N)
@@ -51,29 +48,6 @@ function threepoint(tree, df, traits, N)
         end
     end
     return df
-end
-
-function testtime(tree, traits)
-#Function to see how long it takes to et inputs into right form for threepoint (takes 544ms, is the reason why function takes time)
-
-    leafnames = getnodenames(tree, postorder)
-    #total number of nodes
-    N = length(leafnames)
-    #number of leaves
-    n = nrow(traits)
-    #vector of heigts for each node
-    t = getheight.(tree, leafnames)
-
-    #dataframe to save information in
-    df = DataFrame(Node = leafnames, 
-               t = t,
-               logV = Vector{Union{Nothing, Float64}}(nothing, N),
-               p = Vector{Union{Nothing, Float64}}(nothing, N),
-               Q = Vector{Union{Nothing, Float64}}(nothing, N),
-               xl = Vector{Union{Nothing, Float64}}(nothing, N),
-               xx = Vector{Union{Nothing, Float64}}(nothing, N),
-               yl = Vector{Union{Nothing, Float64}}(nothing, N),
-               yy = Vector{Union{Nothing, Float64}}(nothing, N))
 end
 
 
@@ -168,17 +142,99 @@ rename!(traits, :tmin => :data)
 @btime estimaterates(tree1, traits)
 
 
-#Create C 
-leavess = dat.species
-C = zeros(length(leavess), length(leavess));
-#make the matrix (this code could probably be optimised)
-for i in 1:length(leavess)
-    C[i,i] = getheight(tree1, leavess[i])
-    for j in i+1:length(leavess)
-        ancestor = mrca(tree1, [leavess[i],leavess[j]])
-        C[i,j] = getheight(tree1, ancestor)
-        C[j,i] = C[i,j]
+###############################################################
+#3 Point Signal
+
+function estimaterates(tree, traits, lambda::Float64)
+    #Returns evolution rate, starting value and negative log loglikelihood for traits on tip of tree
+    #INPUTS
+    #tree = tree with lengths, leaves all same length
+    #traits = dataframe with leaf names and trait values, leafnames called 'species' and trait information called 'data'
+    #OUTPUTS
+    #sigmahat - evolution rate
+    #betahat - estimated root trait value
+    #negloglik - negative loglikelihood
+    #df - dataframe of results - will add what all mean later
+
+    #INPUT TESTS
+    #traits for each leaf?
+
+    leafnames = getnodenames(tree, postorder)
+    #total number of nodes
+    N = length(leafnames)
+    #number of leaves
+    n = nrow(traits)
+
+    #dataframe to save information in
+    df = DataFrame(Node = leafnames, 
+            t = Vector{Union{Nothing, Float64}}(nothing, N),
+            logV = Vector{Union{Nothing, Float64}}(nothing, N),
+            p = Vector{Union{Nothing, Float64}}(nothing, N),
+            Q = Vector{Union{Nothing, Float64}}(nothing, N),
+            xl = Vector{Union{Nothing, Float64}}(nothing, N),
+            xx = Vector{Union{Nothing, Float64}}(nothing, N),
+            yl = Vector{Union{Nothing, Float64}}(nothing, N),
+            yy = Vector{Union{Nothing, Float64}}(nothing, N))
+
+
+    #get the heights and multiply internal nodes heighst by lambda
+    heights = DataFrame(Node = leafnames,
+                        t = Vector{Union{Nothing, Float64}}(nothing, N))
+
+    for i in 1:N
+        if isleaf(tree, leafnames[i])
+            heights.t[i] = getheight(tree, leafnames[i])
+        else
+            heights.t[i] = lambda*getheight(tree, leafnames[i])
+        end
+    
     end
+
+    for i in 1:(N-1)
+        #t is the distance between the node and its parent
+        par = getparent(tree, df.Node[i])
+        df.t[i] = heights.t[i] - first(heights[heights.Node .== par, 2])
+    end
+
+
+    df.t[N] = 0
+
+    df = threepoint(tree, df, traits, N)    
+
+    betahat = inv(df.xx[N]) * df.Q[N]
+    sigmahat = (df.yy[N] - 2 * betahat * df.Q[N] + betahat * df.xx[N] * betahat)/n
+
+    #=
+    if sigmahat < 0 #if used prints df2 at the end?
+        resdl = ones(n)*betahat - traits.data #replaces y which is traits
+        traits2 = DataFrame(species = traits.species, data = resdl)
+        df2 = threepoint(tree, df, traits2, N)
+        sigmahat = df2.yy[N]/n
+    end
+    =#
+    
+    negloglik = (1/2)*(n*log(2*pi) + df.logV[N] + n + n*log(sigmahat))
+
+    logV = df.logV[N]
+
+    return betahat, sigmahat, negloglik, logV, df
+end  
+
+@btime estimaterates(tree1, traits, 0.8825229)
+
+tooptimise(tree1, traits, [0.8])
+
+function tooptimise(tree, traits, lambda)
+    res = estimaterates(tree, traits, lambda[1])
+    n = nrow(traits)
+
+    ll = (1/2)*(n*log(2*pi) + res[4] + n*log(res[2]))
+
+    return ll
 end
 
-log(det(C))
+lower = [0.5]
+upper = [1.0]
+start = [0.8]
+
+opts = optimize(x -> tooptimise(tree1, traits, x), lower, upper, start)

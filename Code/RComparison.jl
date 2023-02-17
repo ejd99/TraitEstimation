@@ -57,3 +57,8 @@ row.names(dat) <- dat$species
 #fit model
 fit = phylolm(tmin~1,data=dat,phy=tree)
 "
+
+@btime R"
+#fit model
+fit = phylolm(tmin~1,data=dat,phy=tree, model = c('lambda'))
+"

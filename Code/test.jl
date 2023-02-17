@@ -116,7 +116,7 @@ function estimaterates(tree, traits)
     df = threepoint(tree, df, traits, N)    
 
     betahat = inv(df.xx[N]) * df.Q[N]
-    sigmahat = -(df.yy[N] - 2 * betahat * df.Q[N] + betahat * df.xx[N] * betahat)/n
+    sigmahat = (df.yy[N] - 2 * betahat * df.Q[N] + betahat * df.xx[N] * betahat)/n
 
     
     if sigmahat < 0 #if used prints df2 at the end?
@@ -320,6 +320,12 @@ chain = sample(estmratestp(C, dat.tp), HMC(0.01, 10), 1000, discard_initial = 10
 plml = phylolm(@formula(tmin ~ 1), dat, tree2, model="lambda")
 
 ###########################################################
+
+###########################################################
+
+#3 point lambda, transform tree and optimize estimaterates
+
+############################################################
 
 #Create the model to go into sampler
 @model function estmrateslambda(C, trait)
